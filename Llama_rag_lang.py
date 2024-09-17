@@ -16,6 +16,7 @@ urls = [
     "https://ollama.com/",
     "https://ollama.com/blog/windows-preview",
     "https://ollama.com/blog/openai-compatibility",
+    "https://antongorlin.com/blog/photography-composition-definitive-guide",
 ]
 docs = [WebBaseLoader(url).load() for url in urls]
 docs_list = [item for sublist in docs for item in sublist]
