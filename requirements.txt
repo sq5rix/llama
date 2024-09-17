@@ -4,3 +4,5 @@ ollama
 langchain 
 langchain-community 
 langchain-core
+gradio
+
