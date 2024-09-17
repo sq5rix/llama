@@ -1,3 +1,6 @@
 requests
 numpy
 ollama
+langchain 
+langchain-community 
+langchain-core
