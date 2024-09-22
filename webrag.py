@@ -22,13 +22,12 @@ def scrape_website(url):
     except Exception as e:
         return f"Error during scraping: {e}"
 
-def process_with_llama(scraped_content):
+def process_with_llama(prompt, scraped_content):
     """
-    Simulate processing with a LLM like Llama.
-    In reality, this would involve calling an LLM API.
+    ask llama about content
     """
-    # Placeholder for actual LLM processing
-    return f"Llama's response to the scraped content:\n{scraped_content[:500]}..."  # Truncate for example
+    response = ollama.generate(model="llama3.1:latest", prompt=prompt, system=scraped_content)
+    return response.text 
 
 def main(prompt):
     # Step 1: Find a relevant website for the prompt
@@ -40,10 +39,9 @@ def main(prompt):
         scraped_content += scrape_website(website)
     
     # Step 3: Pass the scraped content to the LLM (Llama in this case)
-    llama_response = process_with_llama(scraped_content)
+    llama_response = process_with_llama(prompt, scraped_content)
     
     return llama_response
 
-# Example usage (uncomment below to run)
-# result = main("Tell me about web scraping")
-# print(result)
+result = main("Tell me about web scraping")
+print(result)
