@@ -4,8 +4,9 @@ import numpy as np
 import torch
 from diffusers import StableDiffusion3Pipeline
 
-#MODEL = "stabilityai/stable-diffusion-3-medium-diffusers"
+# MODEL = "stabilityai/stable-diffusion-3-medium-diffusers"
 MODEL = "stabilityai/stable-diffusion-3.5-medium"
+IMAGES = 'images/'
 
 MAX_SEED = np.iinfo(np.int32).max
 
@@ -42,7 +43,7 @@ def infer(
         height=height,
         generator=generator,
     ).images[0]
-    image.save(f"pix/{title}.png")
+    image.save(f"{IMAGES}/{title}.png")
     return title
 
 
