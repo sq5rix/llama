@@ -6,3 +6,10 @@ langchain-community
 langchain-core
 gradio
 duckduckgo_search
+torch
+diffusers
+transformers
+accelerate
+aura_sr
+protobuf
+sentencepiece
