@@ -4,6 +4,9 @@ import numpy as np
 import torch
 from diffusers import StableDiffusion3Pipeline
 
+#MODEL = "stabilityai/stable-diffusion-3-medium-diffusers"
+MODEL = "stabilityai/stable-diffusion-3.5-medium"
+
 MAX_SEED = np.iinfo(np.int32).max
 
 PROMPT = """Imagine a serene moonlit garden, where a majestic cat 
@@ -43,13 +46,12 @@ def infer(
     return title
 
 
-def create_stable_image(title, prompt, width=1024, height=1024, num_inference_steps=50):
+def create_stable_image(title, prompt, width=512, height=512, num_inference_steps=50):
     """
     square image from stable medium
     """
-    repo = "stabilityai/stable-diffusion-3-medium-diffusers"
     pipe = StableDiffusion3Pipeline.from_pretrained(
-        repo,
+        MODEL,
         text_encoder_3=None,
         tokenizer_3=None,
         torch_dtype=torch.float16,
