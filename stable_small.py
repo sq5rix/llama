@@ -10,7 +10,8 @@ IMAGES = 'images/'
 
 MAX_SEED = np.iinfo(np.int32).max
 
-PROMPT = """Imagine a serene moonlit garden, where a majestic cat 
+PROMPT = """Imagine a serene moonlit garden, 
+    where a majestic cat 
     with shimmering silver fur is perched 
     on a toadstool throne. Its eyes gleam like 
     lanterns in the dark, as it gazes up at a 
@@ -47,7 +48,7 @@ def infer(
     return title
 
 
-def create_stable_image(title, prompt, width=512, height=512, num_inference_steps=50):
+def create_stable_image(title, prompt, width=16*32, height=9*32, num_inference_steps=50):
     """
     square image from stable medium
     """
@@ -70,4 +71,4 @@ def create_stable_image(title, prompt, width=512, height=512, num_inference_step
     return image_name
 
 if __name__ == "__main__":
-    create_stable_image('cats', 'cats')
+    create_stable_image(title='catto', prompt=PROMPT)

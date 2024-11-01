@@ -1,6 +1,8 @@
 from diffusers import AuraFlowPipeline
 import torch
 
+IMAGES = 'images'
+
 class AuraFlow():
     """
     class to keep aura flow data
@@ -12,7 +14,7 @@ class AuraFlow():
             variant="fp16",
         ).to("cuda")
 
-    def generate_image(self, title, prompt, num_inference_steps=50, width=1008,height=672,guidance_scale=3.5,):
+    def generate_image(self, title, prompt, num_inference_steps=50, width=512,height=512,guidance_scale=3.5,):
         image = self.pipeline(
             prompt=prompt,
             width=width,
@@ -23,7 +25,7 @@ class AuraFlow():
             text_encoder_3=None,
             tokenizer_3=None,
         ).images[0]
-        image.save(f"pix/{title}.png")
+        image.save(f"{IMAGES}/{title}.png")
 
 def main():
     """
