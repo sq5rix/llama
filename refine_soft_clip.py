@@ -28,7 +28,7 @@ def fine_tune_soft_prompt(pipe, prompt, num_virtual_tokens=5, num_steps=100, lea
     
     # Initialize soft prompt embeddings
     soft_prompt_embeddings = nn.Parameter(
-        torch.randn(num_virtual_tokens, text_encoder.config.hidden_size, device=device)
+        torch.randn(num_virtual_tokens, text_encoder.config.hidden_size, device=device, dtype=torch.float16)
     )
     
     # Freeze the text encoder
@@ -42,16 +42,17 @@ def fine_tune_soft_prompt(pipe, prompt, num_virtual_tokens=5, num_steps=100, lea
         optimizer.zero_grad()
         
         # Get embeddings for the actual prompt
-        prompt_embeddings = text_encoder.embeddings(input_ids).last_hidden_state
+        #prompt_embeddings = text_encoder.embeddings(input_ids).last_hidden_state
+        prompt_embeddings = text_encoder(input_ids).last_hidden_state
         
         # Concatenate soft prompts with actual prompt embeddings
         embeddings = torch.cat([soft_prompt_embeddings.unsqueeze(0), prompt_embeddings], dim=1)
         
         # Generate latents (dummy latents since we're only optimizing the prompt)
-        latents = torch.randn((1, pipe.unet.in_channels, pipe.unet.sample_size, pipe.unet.sample_size), device=device)
+        latents = torch.randn((1, pipe.unet.in_channels, pipe.unet.sample_size, pipe.unet.sample_size), device=device, dtype=torch.float16)
         
         # Get the model output
-        noise_pred = pipe.unet(latents, timesteps=torch.tensor([0]).to(device), encoder_hidden_states=embeddings).sample
+        noise_pred = pipe.unet(latents, timestep=torch.tensor([0]).to(device), encoder_hidden_states=embeddings).sample
         
         # Define a dummy loss (you can customize this)
         loss = noise_pred.pow(2).mean()
@@ -81,7 +82,8 @@ def dream_model(title, prompt, num_inference_steps=50):
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(pipe.device)
     
     # Get embeddings for the actual prompt
-    prompt_embeddings = pipe.text_encoder.embeddings(input_ids).last_hidden_state
+    #prompt_embeddings = pipe.text_encoder.embeddings(input_ids).last_hidden_state
+    prompt_embeddings = text_encoder(input_ids).last_hidden_state
     
     # Concatenate soft prompts with actual prompt embeddings
     embeddings = torch.cat([soft_prompt_embeddings.unsqueeze(0), prompt_embeddings], dim=1)
