@@ -3,6 +3,8 @@ from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import StableDiffusionPipeline
 from torch import nn, optim
 
+IMAGES = 'images/'
+
 def fine_tune_soft_prompt(pipe, prompt, num_virtual_tokens=5, num_steps=100, learning_rate=0.1):
     """
     Fine-tunes soft prompts to improve image generation.
@@ -64,11 +66,6 @@ def fine_tune_soft_prompt(pipe, prompt, num_virtual_tokens=5, num_steps=100, lea
     # Return the optimized embeddings
     return soft_prompt_embeddings.detach()
     
-    
-    
-    
-    
-    
 def dream_model(title, prompt, num_inference_steps=50):
     model_id = "dreamlike-art/dreamlike-diffusion-1.0"
     pipe = StableDiffusionPipeline.from_pretrained(
@@ -100,3 +97,6 @@ def dream_model(title, prompt, num_inference_steps=50):
     
     image.save(f"{IMAGES}/{title}.png")
     return f"{IMAGES}/{title}.png"
+
+if __name__=='__main__':
+    dream_model('lake', 'a beautiful sunset over mountains with serene lake reflection', num_inference_steps=32)

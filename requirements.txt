@@ -13,3 +13,4 @@ accelerate
 aura_sr
 protobuf
 sentencepiece
+peft

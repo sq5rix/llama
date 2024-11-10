@@ -238,3 +238,7 @@ def example_usage():
     
     # Save the tuned model
     tuner.save_model("tuned_clip_model")
+
+    if __name__=="__main__":
+        example_usage()
+
