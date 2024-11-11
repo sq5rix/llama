@@ -1,140 +1,150 @@
 import torch
-from transformers import CLIPTextModel, CLIPTokenizer
-from diffusers import StableDiffusionPipeline
 from torch import nn, optim
 from torch.nn.functional import cosine_similarity
+from transformers import CLIPTextModel, CLIPTokenizer
+from diffusers import StableDiffusionPipeline
+import torch.nn.functional as F
 
 IMAGES = 'images/'
-
-EPOCHS = 10
-INIT_RND_VALUE = 2.9
-LEARNING_RATE = 0.7
-LOSS_SCALE = 100.0
-ADAM_EPS = 1e-7
+EPOCHS = 50  # Increased from 10
+INIT_RND_VALUE = 0.5  # Reduced from 2.9
+LEARNING_RATE = 1e-4  # Reduced from 0.7
 NUM_TOKENS = 10
-PROMPT = "Create an enchanting, whimsical landscape with balanced warm golden hues and soothing pastel blues. A delicate rose petal lies on a carpet of soft, velvety moss, its edges gently curled as if kissed by the whispering dusk winds. The surrounding foliage, a mix of emerald-green ferns and wispy, lavender-hued wildflowers"
-TITLE = 'whispers'
+PROMPT = "Create an enchanting, whimsical landscape with balanced warm golden hues and soothing pastel blues..."
+TITLE = "new_landscape"
 
-def compare_embeddings(pipe, soft_prompt_embeddings, real_prompt=PROMPT):
-    # Get embeddings for a real prompt
-    real_prompt = "a beautiful sunset over mountains with serene lake reflection"
+def compare_embeddings(pipe, soft_prompt_embeddings, real_prompt):
+    """Compare soft prompt embeddings with real prompt embeddings."""
     input_ids = pipe.tokenizer(real_prompt, return_tensors="pt").input_ids.to(pipe.device)
     real_prompt_embeddings = pipe.text_encoder(input_ids).last_hidden_state
-    # Compute cosine similarity between soft prompts and real prompt
-    similarity = cosine_similarity(soft_prompt_embeddings, real_prompt_embeddings.mean(dim=1))
-    print(f"Similarity: {similarity}")
+    
+    # Normalize embeddings before computing similarity
+    soft_prompt_norm = F.normalize(soft_prompt_embeddings, p=2, dim=1)
+    real_prompt_norm = F.normalize(real_prompt_embeddings, p=2, dim=2)
+    
+    # Compute similarity for each token
+    similarities = torch.matmul(soft_prompt_norm, real_prompt_norm.squeeze(0).T)
+    return similarities
 
 def fine_tune_soft_prompt(pipe, prompt, num_virtual_tokens=NUM_TOKENS, num_steps=EPOCHS, learning_rate=LEARNING_RATE):
-    """
-    Fine-tunes soft prompts to improve image generation.
-    
-    Args:
-        pipe: The Stable Diffusion pipeline with a loaded model.
-        prompt: The initial text prompt.
-        num_virtual_tokens: Number of soft prompt tokens to prepend.
-        num_steps: Number of optimization steps.
-        learning_rate: Learning rate for the optimizer.
-        
-    Returns:
-        The optimized prompt embeddings.
-    """
     device = pipe.device
     tokenizer = pipe.tokenizer
     text_encoder = pipe.text_encoder
-    pipe.unet.enable_gradient_checkpointing()
-    if hasattr(pipe, "text_encoder") and hasattr(pipe.text_encoder, "gradient_checkpointing_enable"):
-        pipe.text_encoder.gradient_checkpointing_enable()
     
-    # Tokenize the prompt
-    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
-    
-    # Initialize soft prompt embeddings
+    # Initialize with smaller random values and proper dtype
     soft_prompt_embeddings = nn.Parameter(
-        torch.randn(num_virtual_tokens, text_encoder.config.hidden_size, device=device, dtype=torch.float16) * INIT_RND_VALUE
+        torch.randn(1, num_virtual_tokens, text_encoder.config.hidden_size, 
+                   device=device, dtype=text_encoder.dtype) * INIT_RND_VALUE
     )
-    torch.nn.utils.clip_grad_norm_([soft_prompt_embeddings], max_norm=1.0)
+    
+    # Get target embeddings
+    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
+    with torch.no_grad():
+        target_embeddings = text_encoder(input_ids).last_hidden_state
     
     # Freeze the text encoder
-    text_encoder.requires_grad_(False)
+    for param in text_encoder.parameters():
+        param.requires_grad = False
     
-    # Optimizer
-    optimizer = optim.AdamW([soft_prompt_embeddings], lr=learning_rate, eps=ADAM_EPS)
+    optimizer = optim.AdamW([soft_prompt_embeddings], lr=learning_rate)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_steps)
     
-    # Optimization loop
+    best_loss = float('inf')
+    best_embeddings = None
+    
     for step in range(num_steps):
         optimizer.zero_grad()
         
-        # Get embeddings for the actual prompt
-        #prompt_embeddings = text_encoder.embeddings(input_ids).last_hidden_state
-        prompt_embeddings = text_encoder(input_ids).last_hidden_state
+        # Concatenate soft prompts with target embeddings
+        combined_embeddings = torch.cat([soft_prompt_embeddings, target_embeddings], dim=1)
         
-        # Concatenate soft prompts with actual prompt embeddings
-        embeddings = torch.cat([soft_prompt_embeddings.unsqueeze(0), prompt_embeddings], dim=1)
+        # Generate latents
+        latents = torch.randn(
+            (1, pipe.unet.config.in_channels, pipe.unet.config.sample_size, pipe.unet.config.sample_size),
+            device=device, dtype=text_encoder.dtype
+        )
         
-        #latents = torch.randn((1, pipe.unet.in_channels, pipe.unet.sample_size, pipe.unet.sample_size), device=device, dtype=torch.float16)
-        latents = torch.randn((1, pipe.unet.config.in_channels, pipe.unet.config.sample_size, pipe.unet.config.sample_size), device=device, dtype=torch.float16)
+        # Predict noise
+        timesteps = torch.tensor([999], device=device)  # Start with high noise level
+        noise_pred = pipe.unet(latents, timesteps, encoder_hidden_states=combined_embeddings).sample
         
-        # Get the model output
-        noise_pred = pipe.unet(latents, timestep=torch.tensor([0]).to(device), encoder_hidden_states=embeddings).sample
+        # Multiple loss components
+        # 1. Reconstruction loss
+        recon_loss = F.mse_loss(noise_pred, torch.zeros_like(noise_pred))
         
-        # Define a dummy loss (you can customize this)
-        loss = noise_pred.pow(2).mean() #* LOSS_SCALE
+        # 2. Similarity loss with target embeddings
+        sim_loss = -torch.mean(cosine_similarity(
+            soft_prompt_embeddings.view(-1, text_encoder.config.hidden_size),
+            target_embeddings.view(-1, text_encoder.config.hidden_size)
+        ))
         
-        # Backpropagate
+        # 3. Regularization loss to prevent embeddings from growing too large
+        reg_loss = 0.01 * torch.norm(soft_prompt_embeddings)
+        
+        # Combined loss
+        loss = recon_loss + 0.1 * sim_loss + reg_loss
+        
         loss.backward()
-
-        # scale back
-        #for param in [soft_prompt_embeddings]:
-            #param.grad /= LOSS_SCALE
-
-        optimizer.step()
         
-        print(f"Step {step}/{num_steps}, Loss: {loss.item()}")
+        # Gradient clipping
+        torch.nn.utils.clip_grad_norm_([soft_prompt_embeddings], max_norm=1.0)
+        
+        optimizer.step()
+        scheduler.step()
+        
+        # Save best embeddings
+        if loss.item() < best_loss:
+            best_loss = loss.item()
+            best_embeddings = soft_prompt_embeddings.detach().clone()
+        
+        if step % 10 == 0:
+            print(f"Step {step}/{num_steps}, Loss: {loss.item():.4f}")
     
-    # Return the optimized embeddings
-    return soft_prompt_embeddings.detach()
-    
-def dream_model(title=TITLE, prompt=PROMPT, num_inference_steps=50):
-    model_id = "dreamlike-art/dreamlike-diffusion-1.0"
+    return best_embeddings
 
+def generate_image(pipe, embeddings, prompt, num_inference_steps=50, title="output"):
+    input_ids = pipe.tokenizer(prompt, return_tensors="pt").input_ids.to(pipe.device)
+    prompt_embeddings = pipe.text_encoder(input_ids).last_hidden_state
+    
+    # Concatenate soft prompts with prompt embeddings
+    combined_embeddings = torch.cat([embeddings, prompt_embeddings], dim=1)
+    
+    # Generate image with noise scheduling
+    with torch.no_grad():
+        image = pipe(
+            prompt_embeds=combined_embeddings,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=7.5,  # Added guidance scale
+            width=512,
+            height=512,
+        ).images[0]
+    
+    image.save(f"{IMAGES}/{title}.png")
+    return f"{IMAGES}/{title}.png"
+
+def dream_model(title="output", prompt=PROMPT, num_inference_steps=50):
+    model_id = "dreamlike-art/dreamlike-diffusion-1.0"
     pipe = StableDiffusionPipeline.from_pretrained(
         model_id,
         torch_dtype=torch.float16
     ).to("cuda")
-
-    #image = pipe(
-    #    prompt=PROMPT,
-    #    num_inference_steps=num_inference_steps,
-    #    width=512,
-    #    height=512,
-    #).images[0]
-    #image.save(f"{IMAGES}/{title}_orig.png")
+    
+    # Enable attention slicing for memory efficiency
+    pipe.enable_attention_slicing()
     
     # Fine-tune soft prompts
     soft_prompt_embeddings = fine_tune_soft_prompt(pipe, prompt)
     
-    # Tokenize the prompt
-    tokenizer = pipe.tokenizer
-    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(pipe.device)
+    # Generate and save image
+    image_path = generate_image(pipe, soft_prompt_embeddings, prompt, 
+                              num_inference_steps=num_inference_steps, 
+                              title=title)
     
-    # Get embeddings for the actual prompt
-    #prompt_embeddings = pipe.text_encoder.embeddings(input_ids).last_hidden_state
-    prompt_embeddings = pipe.text_encoder(input_ids).last_hidden_state
+    # Compare and print similarities
+    similarities = compare_embeddings(pipe, soft_prompt_embeddings.squeeze(0), prompt)
+    print(f"Token-wise similarities:\n{similarities}")
     
-    # Concatenate soft prompts with actual prompt embeddings
-    embeddings = torch.cat([soft_prompt_embeddings.unsqueeze(0), prompt_embeddings], dim=1)
-    
-    # Generate the image using the optimized embeddings
-    with torch.no_grad():
-        image = pipe(
-            prompt_embeds=embeddings,
-            num_inference_steps=num_inference_steps,
-            width=512,
-            height=512,
-        ).images[0]
-    image.save(f"{IMAGES}/{title}.png")
-    compare_embeddings(pipe, soft_prompt_embeddings)
-    return f"{IMAGES}/{title}.png"
+    return image_path
 
-if __name__=='__main__':
-    dream_model()
+if __name__ == '__main__':
+    dream_model(title=TITLE, prompt=PROMPT)
