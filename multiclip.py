@@ -2,12 +2,12 @@ from transformers import CLIPTokenizer, CLIPTextModel
 from diffusers import StableDiffusionPipeline
 import torch
 
-def create_pipeline_with_long_prompt(model_name="CompVis/stable-diffusion-v1-4", 
-                                     clip_model_name="openai/clip-vit-large-patch14", 
-                                     prompt=None, 
-                                     aggregation="average"):
+def generate_image_from_long_prompt(model_name="CompVis/stable-diffusion-v1-4", 
+                                    clip_model_name="openai/clip-vit-large-patch14", 
+                                    prompt=None, 
+                                    aggregation="average"):
     """
-    Creates a Stable Diffusion pipeline with a long prompt using CLIP, chunked and aggregated.
+    Generates an image from a long prompt using CLIP in chunks and aggregation.
     
     Parameters:
     - model_name (str): The name of the Stable Diffusion model to load.
@@ -16,7 +16,7 @@ def create_pipeline_with_long_prompt(model_name="CompVis/stable-diffusion-v1-4",
     - aggregation (str): Aggregation method for embeddings ("average" or "concatenate").
     
     Returns:
-    - pipe (StableDiffusionPipeline): A Stable Diffusion pipeline with a custom generate method for long prompts.
+    - images (List[PIL.Image]): Generated image(s) from the long prompt.
     """
     
     # Initialize CLIP tokenizer and text encoder
@@ -49,21 +49,16 @@ def create_pipeline_with_long_prompt(model_name="CompVis/stable-diffusion-v1-4",
     pipe = StableDiffusionPipeline.from_pretrained(model_name, torch_dtype=torch.float16)
     pipe.to("cuda")
     
-    # Add a custom generate method to use the combined embedding
-    def generate_with_custom_embedding(pipe, embedding, **kwargs):
-        with torch.no_grad():
-            images = pipe(prompt_embeds=embedding, **kwargs).images
-        return images
+    # Generate the image using the combined embedding
+    with torch.no_grad():
+        images = pipe(prompt_embeds=combined_embedding).images
     
-    # Attach the generate method to the pipeline and set custom embedding
-    pipe.generate_with_custom_embedding = lambda **kwargs: generate_with_custom_embedding(pipe, combined_embedding, **kwargs)
-    
-    return pipe
+    return images
 
-def main():
-    # Example usage:
-    prompt = "A very detailed description that goes beyond 77 tokens... (insert your long prompt here)"
-    pipe = create_pipeline_with_long_prompt(prompt=prompt, aggregation="average")
+# Example usage:
+prompt = "A very detailed description that goes beyond 77 tokens... (insert your long prompt here)"
+images = generate_image_from_long_prompt(prompt=prompt, aggregation="average")
 
-    # Generate an image using the custom embedding
-    image = pipe.generate_with_custom_embedding()
+# Save the first image to a file
+img_path = "generated_image.png"
+images[0].save(img_path)
