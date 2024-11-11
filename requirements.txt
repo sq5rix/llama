@@ -14,3 +14,4 @@ aura_sr
 protobuf
 sentencepiece
 peft
+xformers
