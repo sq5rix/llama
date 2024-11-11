@@ -2,17 +2,29 @@ import torch
 from transformers import CLIPTextModel, CLIPTokenizer
 from diffusers import StableDiffusionPipeline
 from torch import nn, optim
+from torch.nn.functional import cosine_similarity
 
 IMAGES = 'images/'
 
 EPOCHS = 50
-INIT_RND_VALUE = 1.0
-LEARNING_RATE = 0.8
+INIT_RND_VALUE = 0.1
+LEARNING_RATE = 1.2
 LOSS_SCALE = 100.0
 ADAM_EPS = 1e-7
-PROMPT =  'a beautiful sunset over mountains with serene lake reflection'
+NUM_TOKENS = 10
+PROMPT = "Create an enchanting, whimsical landscape with balanced warm golden hues and soothing pastel blues. A delicate rose petal lies on a carpet of soft, velvety moss, its edges gently curled as if kissed by the whispering dusk winds. The surrounding foliage, a mix of emerald-green ferns and wispy, lavender-hued wildflowers"
+TITLE = 'whispers'
 
-def fine_tune_soft_prompt(pipe, prompt, num_virtual_tokens=5, num_steps=EPOCHS, learning_rate=LEARNING_RATE):
+def compare_embeddings(pipe, soft_prompt_embeddings, real_prompt=PROMPT):
+    # Get embeddings for a real prompt
+    real_prompt = "a beautiful sunset over mountains with serene lake reflection"
+    input_ids = pipe.tokenizer(real_prompt, return_tensors="pt").input_ids.to(pipe.device)
+    real_prompt_embeddings = pipe.text_encoder(input_ids).last_hidden_state
+    # Compute cosine similarity between soft prompts and real prompt
+    similarity = cosine_similarity(soft_prompt_embeddings, real_prompt_embeddings.mean(dim=1))
+    print(f"Similarity: {similarity}")
+
+def fine_tune_soft_prompt(pipe, prompt, num_virtual_tokens=NUM_TOKENS, num_steps=EPOCHS, learning_rate=LEARNING_RATE):
     """
     Fine-tunes soft prompts to improve image generation.
     
@@ -82,7 +94,7 @@ def fine_tune_soft_prompt(pipe, prompt, num_virtual_tokens=5, num_steps=EPOCHS, 
     # Return the optimized embeddings
     return soft_prompt_embeddings.detach()
     
-def dream_model(title, prompt, num_inference_steps=50):
+def dream_model(title=TITLE, prompt=PROMPT, num_inference_steps=50):
     model_id = "dreamlike-art/dreamlike-diffusion-1.0"
 
     pipe = StableDiffusionPipeline.from_pretrained(
@@ -90,13 +102,13 @@ def dream_model(title, prompt, num_inference_steps=50):
         torch_dtype=torch.float16
     ).to("cuda")
 
-    #image = pipe(
-    #    prompt=PROMPT,
-    #    num_inference_steps=num_inference_steps,
-    #    width=512,
-    #    height=512,
-    #).images[0]
-    #image.save(f"{IMAGES}/{title}_orig.png")
+    image = pipe(
+        prompt=PROMPT,
+        num_inference_steps=num_inference_steps,
+        width=512,
+        height=512,
+    ).images[0]
+    image.save(f"{IMAGES}/{title}_orig.png")
     
     # Fine-tune soft prompts
     soft_prompt_embeddings = fine_tune_soft_prompt(pipe, prompt)
@@ -121,7 +133,8 @@ def dream_model(title, prompt, num_inference_steps=50):
             height=512,
         ).images[0]
     image.save(f"{IMAGES}/{title}.png")
+    compare_embeddings(pipe, soft_prompt_embeddings)
     return f"{IMAGES}/{title}.png"
 
 if __name__=='__main__':
-    dream_model('lake', PROMPT, num_inference_steps=50)
+    dream_model()
