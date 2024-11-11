@@ -5,15 +5,25 @@ import torch
 def generate_image_from_long_prompt(model_name="CompVis/stable-diffusion-v1-4", 
                                     clip_model_name="openai/clip-vit-large-patch14", 
                                     prompt=None, 
-                                    aggregation="average"):
+                                    negative_prompt=None, 
+                                    guidance_scale=7.5, 
+                                    height=512, 
+                                    width=512, 
+                                    aggregation="average", 
+                                    num_inference_steps=50):
     """
-    Generates an image from a long prompt using CLIP in chunks and aggregation.
+    Generates an image from a long prompt using CLIP in chunks and aggregation, with added flexibility for image generation parameters.
     
     Parameters:
     - model_name (str): The name of the Stable Diffusion model to load.
     - clip_model_name (str): The name of the CLIP model for text encoding.
     - prompt (str): The long prompt text to use.
+    - negative_prompt (str): Text for negative prompt (optional).
+    - guidance_scale (float): The guidance scale for the diffusion process.
+    - height (int): Height of the output image.
+    - width (int): Width of the output image.
     - aggregation (str): Aggregation method for embeddings ("average" or "concatenate").
+    - num_inference_steps (int): Number of inference steps for image generation.
     
     Returns:
     - images (List[PIL.Image]): Generated image(s) from the long prompt.
@@ -49,15 +59,49 @@ def generate_image_from_long_prompt(model_name="CompVis/stable-diffusion-v1-4",
     pipe = StableDiffusionPipeline.from_pretrained(model_name, torch_dtype=torch.float16)
     pipe.to("cuda")
     
+    # Tokenize and process the negative prompt if provided
+    if negative_prompt:
+        negative_inputs = tokenizer(negative_prompt, return_tensors="pt", padding=True, truncation=True, max_length=77)
+        negative_input_ids = negative_inputs.input_ids.squeeze()
+        negative_chunks = [negative_input_ids[i:i + chunk_size] for i in range(0, len(negative_input_ids), chunk_size)]
+        
+        negative_embeddings = []
+        for chunk in negative_chunks:
+            chunk = chunk.unsqueeze(0).to("cuda")
+            with torch.no_grad():
+                embedding = text_encoder(chunk).last_hidden_state
+            negative_embeddings.append(embedding)
+        
+        if aggregation == "average":
+            combined_negative_embedding = torch.mean(torch.stack(negative_embeddings), dim=0)
+        elif aggregation == "concatenate":
+            combined_negative_embedding = torch.cat(negative_embeddings, dim=1)
+    else:
+        combined_negative_embedding = None
+    
     # Generate the image using the combined embedding
     with torch.no_grad():
-        images = pipe(prompt_embeds=combined_embedding).images
+        images = pipe(prompt_embeds=combined_embedding,
+                      negative_prompt_embeds=combined_negative_embedding,
+                      guidance_scale=guidance_scale,
+                      height=height,
+                      width=width,
+                      num_inference_steps=num_inference_steps).images
     
     return images
 
 # Example usage:
 prompt = "A very detailed description that goes beyond 77 tokens... (insert your long prompt here)"
-images = generate_image_from_long_prompt(prompt=prompt, aggregation="average")
+negative_prompt = "undesired elements in the image, e.g., low quality, distortions"
+images = generate_image_from_long_prompt(
+    prompt=prompt,
+    negative_prompt=negative_prompt,
+    guidance_scale=8.0,
+    height=768,
+    width=768,
+    num_inference_steps=60,
+    aggregation="average"
+)
 
 # Save the first image to a file
 img_path = "generated_image.png"
