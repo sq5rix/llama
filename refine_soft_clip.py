@@ -6,9 +6,9 @@ from torch.nn.functional import cosine_similarity
 
 IMAGES = 'images/'
 
-EPOCHS = 50
-INIT_RND_VALUE = 0.1
-LEARNING_RATE = 1.2
+EPOCHS = 10
+INIT_RND_VALUE = 2.9
+LEARNING_RATE = 0.7
 LOSS_SCALE = 100.0
 ADAM_EPS = 1e-7
 NUM_TOKENS = 10
@@ -102,13 +102,13 @@ def dream_model(title=TITLE, prompt=PROMPT, num_inference_steps=50):
         torch_dtype=torch.float16
     ).to("cuda")
 
-    image = pipe(
-        prompt=PROMPT,
-        num_inference_steps=num_inference_steps,
-        width=512,
-        height=512,
-    ).images[0]
-    image.save(f"{IMAGES}/{title}_orig.png")
+    #image = pipe(
+    #    prompt=PROMPT,
+    #    num_inference_steps=num_inference_steps,
+    #    width=512,
+    #    height=512,
+    #).images[0]
+    #image.save(f"{IMAGES}/{title}_orig.png")
     
     # Fine-tune soft prompts
     soft_prompt_embeddings = fine_tune_soft_prompt(pipe, prompt)
