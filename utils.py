@@ -5,8 +5,10 @@ utils
 import math
 import random
 import uuid
-import requests 
+
+import requests
 from PIL import Image
+
 
 def generate_uuid():
     """
@@ -47,11 +49,11 @@ def download_image(url, save_path):
     try:
         # Send a GET request to the URL
         response = requests.get(url)
-        
+
         # Check if the request was successful
         if response.status_code == 200:
             # Open the file in write-binary mode and save the content
-            with open(save_path, 'wb') as f:
+            with open(save_path, "wb") as f:
                 f.write(response.content)
             print(f"Image downloaded and saved to {save_path}")
         else:
@@ -59,14 +61,16 @@ def download_image(url, save_path):
     except Exception as e:
         print(f"An error occurred: {e}")
 
+
 def count_words(text):
     # Split the text into words using whitespace as the delimiter
     words = text.split()
-    
+
     # Count the number of words in the list
     word_count = len(words)
-    
+
     return word_count
+
 
 def resize_image(image_path, scale, output_image_name):
     im = Image.open(image_path)
@@ -81,16 +85,17 @@ def main():
     """
     main
     """
-    #result = generate_uuid()
-    #item_list = ["apple", "banana", "cherry"]
-    #weights = [0.2, 0.4, 0.4]
-    #print("random: ", get_random_item(item_list))
-    #print("weight: ", get_random_item_weighted(item_list, weights))
-    #print("poisson: ", get_poisson_item(item_list))
+    # result = generate_uuid()
+    # item_list = ["apple", "banana", "cherry"]
+    # weights = [0.2, 0.4, 0.4]
+    # print("random: ", get_random_item(item_list))
+    # print("weight: ", get_random_item_weighted(item_list, weights))
+    # print("poisson: ", get_poisson_item(item_list))
     url = "https://file.io/RkKxYSwwmRxF"  # Replace with your image URL
     save_path = "downloaded_image.jpg"  # Specify where you want to save the image
     download_image(url, save_path)
-    resize_image(save_path, 0.5, 'pix/x.jpg')
+    resize_image(save_path, 0.5, "pix/x.jpg")
+
 
 if __name__ == "__main__":
     main()

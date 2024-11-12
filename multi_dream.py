@@ -2,24 +2,40 @@ import torch
 from diffusers import StableDiffusionPipeline
 from transformers import CLIPTextModel, CLIPTokenizer
 
+from utils import count_words
+
 # MODEL = "CompVis/stable-diffusion-v1-4"
 MODEL = "dreamlike-art/dreamlike-diffusion-1.0"
 CLIP = "openai/clip-vit-large-patch14"
 
-PROMPT = """
-    Envision a serene, warm-lit scene: a delicate, hand-woven tapestry 
-    suspended in mid-air above a shallow, moonlit pond. 
-    The golden hues of dawn softly caress the surroundings, 
-    with gentle wisps of fog dancing across the water’s surface. 
-    A lone, gnarled tree stands sentinel on the far bank, 
-    its branches stretching upwards like nature’s own cathedral. 
-    Place the central axis of the canvas at a 45-degree angle 
-    to the right edge of the frame, allowing its intricate patterns 
-    to spill diagonally across the composition. 
-    Balance the palette with complementary earthy tones: 
-    rich soil, weathered stone, and the deep blues of a summer sky, 
-    subtly nuanced in the shadows.
+PROMPT_SHORT = """
+    Vibrant autumn landscape: warm sunlight filters through golden leaves 
+    of deciduous trees, illuminating a carpet of crimson and amber hues 
+    on the forest floor. A few wispy clouds drift lazily across a blue sky, 
+    casting dappled shadows on the terrain. 
     """
+
+PROMPT_LONG = """
+A young woman stands at the center of a vibrant autumn landscape, 
+her figure radiating warmth and energy against the cool, blue-green 
+hues of the forest. The warm sunlight filters through the golden 
+leaves above, casting a golden glow around her, but also creates 
+a dramatic backlight that sets her features ablaze with depth and 
+dimension. Her long, raven-black hair is blown back by the gentle 
+breeze, framing her face and highlighting the sharp angles of her 
+cheekbones. She wears a rich, crimson cloak cinched at the waist 
+with a wide, leather belt, its bold color popping against the muted 
+tones of the forest floor. As she walks through the landscape, 
+the camera's attention is drawn to her figure, isolating her from 
+the surroundings and making her the focal point. The wooden bridge 
+in the background recedes into the distance, becoming a subtle 
+element that adds depth and context to the scene without competing 
+with the woman's presence. The entire composition is balanced around 
+the axis of her body, creating a sense of symmetry and harmony. 
+The warm sunlight casts long shadows across the forest floor, 
+leading the viewer's eye to the woman and drawing attention 
+to her striking features.
+"""
 
 
 def tokenize_extended_clip(prompt, aggregation="concatenate"):
@@ -55,9 +71,11 @@ def tokenize_extended_clip(prompt, aggregation="concatenate"):
     return combined_embedding
 
 
-def dream_model(
+def dream_model_long(
     title,
     prompt,
+    width=512,
+    height=512,
     num_inference_steps=50,
     aggregation="concatenate",
 ):
@@ -69,14 +87,48 @@ def dream_model(
 
     image = pipe(
         prompt_embeds=combined_embedding,
-        # prompt=PROMPT,
         num_inference_steps=num_inference_steps,
-        width=512,
-        height=512,
+        width=width,
+        height=height,
         guidance_scale=7.5,
     ).images[0]
     image.save(f"images/{title}.png")
     return f"images/{title}.png"
 
 
-_ = dream_model("paint_no_grad", PROMPT, num_inference_steps=50)
+def dream_model_short(
+    title,
+    prompt,
+    width=512,
+    height=512,
+    num_inference_steps=50,
+):
+    model_id = "dreamlike-art/dreamlike-diffusion-1.0"
+    pipe = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch.float16)
+    pipe = pipe.to("cuda")
+
+    image = pipe(
+        prompt,
+        num_inference_steps=num_inference_steps,
+        width=width,
+        height=height,
+        guidance_scale=7.5,
+    ).images[0]
+    image.save(f"images/{title}.png")
+    return f"images/{title}.png"
+
+
+print("short prompt len: ", count_words(PROMPT_SHORT))
+print("long prompt len: ", count_words(PROMPT_LONG))
+
+_ = dream_model_short("test_cut_prompt", PROMPT_SHORT, width=1024, height=1024)
+_ = dream_model_long(
+    "test_long_prompt_concat", PROMPT_SHORT + PROMPT_LONG, width=1024, height=1024
+)
+_ = dream_model_long(
+    "test_long_prompt_average",
+    PROMPT_SHORT + PROMPT_LONG,
+    aggregation="average",
+    width=1024,
+    height=1024,
+)
